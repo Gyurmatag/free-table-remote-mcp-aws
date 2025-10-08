@@ -4,10 +4,115 @@ A Model Context Protocol (MCP) server for restaurant booking management deployed
 
 ## 🏗️ Architecture
 
+```mermaid
+graph TB
+    subgraph "Internet"
+        U[Users/Clients]
+        CF[CloudFront Distribution]
+    end
+    
+    subgraph "AWS Global"
+        WAF[WAF Protection]
+        CF --> WAF
+    end
+    
+    subgraph "AWS Region (us-east-1)"
+        subgraph "VPC"
+            subgraph "Public Subnets"
+                ALB[Application Load Balancer]
+                NAT[NAT Gateway]
+            end
+            
+            subgraph "Private Subnets"
+                ECS[ECS Fargate Cluster]
+                LAMBDA[Lambda Functions]
+            end
+        end
+        
+        subgraph "Security & Auth"
+            COGNITO[Cognito User Pool]
+            IAM[IAM Roles & Policies]
+        end
+        
+        subgraph "Monitoring"
+            CW[CloudWatch Logs]
+            S3[S3 Access Logs]
+        end
+        
+        subgraph "External APIs"
+            FT[FreeTable API<br/>free-table.gyurmatag.workers.dev]
+        end
+    end
+    
+    %% Connections
+    U --> CF
+    WAF --> ALB
+    ALB --> ECS
+    ALB --> LAMBDA
+    ECS --> COGNITO
+    LAMBDA --> COGNITO
+    ECS --> FT
+    LAMBDA --> FT
+    ECS --> CW
+    LAMBDA --> CW
+    ALB --> S3
+    ECS --> IAM
+    LAMBDA --> IAM
+    
+    %% Styling
+    classDef aws fill:#ff9900,stroke:#232f3e,stroke-width:2px,color:#fff
+    classDef external fill:#00a86b,stroke:#232f3e,stroke-width:2px,color:#fff
+    classDef compute fill:#4d148c,stroke:#232f3e,stroke-width:2px,color:#fff
+    classDef security fill:#dd344c,stroke:#232f3e,stroke-width:2px,color:#fff
+    
+    class CF,WAF,ALB,ECS,LAMBDA,COGNITO,IAM,CW,S3,NAT aws
+    class U,FT external
+    class ECS,LAMBDA compute
+    class COGNITO,IAM,WAF security
+```
+
+### Architecture Components
+
 - **VPC Stack**: Virtual Private Cloud with public/private subnets
 - **Security Stack**: Cognito User Pool, WAF rules, and IAM roles  
 - **CloudFront-WAF Stack**: Global content delivery with security
 - **MCP Server Stack**: ECS Fargate and Lambda MCP servers
+
+### Data Flow
+
+```mermaid
+sequenceDiagram
+    participant C as MCP Client
+    participant CF as CloudFront
+    participant WAF as WAF
+    participant ALB as Load Balancer
+    participant MCP as MCP Server
+    participant COG as Cognito
+    participant FT as FreeTable API
+    
+    C->>CF: 1. MCP Request
+    CF->>WAF: 2. Security Check
+    WAF->>ALB: 3. Forward Request
+    ALB->>MCP: 4. Route to ECS/Lambda
+    
+    MCP->>COG: 5. Validate OAuth Token
+    COG-->>MCP: 6. Token Valid
+    
+    MCP->>FT: 7. API Call (get_restaurants/create_booking/update_booking)
+    FT-->>MCP: 8. API Response
+    
+    MCP-->>ALB: 9. MCP Response
+    ALB-->>CF: 10. Forward Response
+    CF-->>C: 11. Return to Client
+```
+
+### Security Layers
+
+1. **CloudFront**: Global CDN with DDoS protection
+2. **WAF**: Web Application Firewall with rate limiting
+3. **VPC**: Network isolation and security groups
+4. **Cognito**: OAuth 2.0 authentication and authorization
+5. **IAM**: Least privilege access control
 
 ## 🚀 Features
 
